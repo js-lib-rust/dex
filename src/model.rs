@@ -7,7 +7,7 @@ pub struct Definition {
     word: String,
     // key is a space separated string of all word's flexions, in both UTF-8 and ASCII formats
     key: String,
-    pub meanings: Vec<Meaning>,
+    meanings: Vec<Meaning>,
     expressions: Vec<Expression>,
 }
 

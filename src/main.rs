@@ -20,9 +20,7 @@ async fn main() -> Result<()> {
         };
         let definition = dex.query(id, word)?;
         base_id = id;
-        if !definition.meanings.is_empty() {
-            let _ = kb.insert(&definition).await?;
-        }
+        let _ = kb.insert(&definition).await?;
     }
 
     Ok(())

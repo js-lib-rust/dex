@@ -28,10 +28,17 @@ impl Database {
     }
 
     pub fn next_word(&mut self, base_id: u32) -> Option<(u32, String)> {
-        let id_query = format!(
-            "SELECT id,description AS word FROM entry WHERE id>{base_id} ORDER BY id LIMIT 1"
+        let query = format!(
+            "SELECT e.id,e.description AS word FROM entry e \
+        JOIN treeentry te ON e.id=te.entryId \
+        JOIN tree t ON te.treeId=t.id \
+        JOIN meaning m ON t.id=m.treeId \
+        WHERE e.id>{base_id} AND e.structuristId<>0 \
+        ORDER BY e.id \
+        LIMIT 1"
         );
-        let row: Row = self.connection.query_first(&id_query).ok()??;
+
+        let row: Row = self.connection.query_first(&query).ok()??;
         let id: u32 = row.get("id")?;
         let word: String = row.get("word")?;
         let word = word.split_whitespace().next()?.to_string();
@@ -46,7 +53,7 @@ impl Database {
         JOIN treeentry te ON e.id=te.entryId \
         JOIN tree t ON te.treeId=t.id \
         JOIN meaning m ON t.id=m.treeId \
-        WHERE e.id={definition_id} AND e.structuristId <> 0 \
+        WHERE e.id={definition_id} AND e.structuristId<>0 \
         ORDER BY m.displayOrder"
         );
 
@@ -54,7 +61,7 @@ impl Database {
             "SELECT DISTINCT f.formUtf8General FROM entry e 
         JOIN entrylexeme el ON e.id=el.entryId \
         JOIN inflectedform f ON el.lexemeId=f.lexemeId \
-        WHERE e.id={definition_id} and e.structuristId <> 0"
+        WHERE e.id={definition_id} and e.structuristId<>0"
         );
 
         let records: Vec<Record> =
@@ -92,6 +99,7 @@ impl Database {
         }
 
         let r_missing_definition = Regex::new(r"^(\(.+\)|.+:)$")?;
+        let r_incomplete_meaning = Regex::new(r"^\$\((.+)\)\$\s*$")?;
         for item in DefIterator::new(records) {
             let mut definition_type = match item.definition.as_str() {
                 "" => {
@@ -101,6 +109,19 @@ impl Database {
                     let definition = if let Some(first_char) = synonymous.chars().next() {
                         let rest = &synonymous[first_char.len_utf8()..];
                         format!("{}{}.", first_char.to_uppercase(), rest)
+                    } else {
+                        String::new()
+                    };
+                    DefType::Meaning(Meaning::new(&definition))
+                }
+
+                s if r_incomplete_meaning.is_match(s) => {
+                    let Some(synonymous) = self.synonymous(item.id) else {
+                        continue;
+                    };
+                    let definition = if let Some(first_char) = synonymous.chars().next() {
+                        let rest = &synonymous[first_char.len_utf8()..];
+                        format!("{} {}{}.", &self.str(s), first_char.to_uppercase(), rest)
                     } else {
                         String::new()
                     };
