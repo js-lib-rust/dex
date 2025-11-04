@@ -1,0 +1,16 @@
+[package]
+name = "dex"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+thiserror = "1.0"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+futures = "0.3"
+futures-util = "0.3"
+async-stream = "0.3"
+mongodb = "2.8"
+mysql = "24.0"
+regex = "1.10"
+deunicode = "1.4"
