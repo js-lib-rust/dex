@@ -180,7 +180,7 @@ impl Database {
             return Some((phrase, definition));
         }
 
-        let r = Regex::new(r"\[(\d+)\]").ok()?;
+        let r = Regex::new(r"\[(\d+)\*?\]").ok()?;
         if let Some(definition_id) = r
             .captures(expression)
             .and_then(|cap| cap.get(1))
@@ -199,6 +199,20 @@ impl Database {
                 }
             };
         };
+
+        let r = Regex::new(r"^\$(.+?)\$\.?$").ok()?;
+        if let Some(captures) = r.captures(expression) {
+            let phrase = captures.get(1).map(|m| m.as_str().to_string())?;
+            let query = format!(
+                "SELECT m.internalRep AS definition FROM relation r \
+                JOIN meaning m ON r.treeId=m.treeId \
+                WHERE r.meaningId={record_id} AND m.`type` IN (0,5)"
+            );
+            let definition: Option<String> = self.connection.query_first(query).ok()?;
+            if let Some(definition) = definition {
+                return Some((phrase, self.str(&definition)));
+            }
+        }
 
         println!("--- rejected expression: record_id: {record_id}, expression: {expression}");
         None

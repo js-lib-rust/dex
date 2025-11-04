@@ -3,7 +3,6 @@ mod error;
 mod kb;
 mod model;
 mod util;
-
 use crate::error::Result;
 
 #[tokio::main]
@@ -21,7 +20,7 @@ async fn main() -> Result<()> {
         };
         let definition = dex.query(id, word)?;
         base_id = id;
-        //let _ = kb.insert(&definition).await?;
+        let _ = kb.insert(&definition).await?;
     }
 
     Ok(())

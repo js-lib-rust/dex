@@ -19,8 +19,7 @@ impl Database {
 
     pub async fn insert(&self, definition: &Definition) -> Result<()> {
         let doc = to_document(definition)?;
-        let result = self.collection.insert_one(doc, None).await?;
-        println!("{result:?}");
+        let _ = self.collection.insert_one(doc, None).await?;
         Ok(())
     }
 }
