@@ -215,7 +215,7 @@ impl Database {
     }
 
     fn parse_example(&self, example: &str) -> Option<Example> {
-        let r = Regex::new(r"^([$\[].+)\$\s?(\(?[\w\-.,]{2,}\)?.*)?$").ok()?;
+        let r = Regex::new(r"^([$\[\(].+\$(?: \[.+\])?\.?)\s?(\(?[\w\-.,]{2,}\)?.*)?$").ok()?;
         if let Some(captures) = r.captures(example) {
             let text = captures.get(1).map(|m| m.as_str())?;
             let mut example = Example::new(&self.str(text));
