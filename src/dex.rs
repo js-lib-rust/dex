@@ -1,11 +1,11 @@
-use deunicode::deunicode;
-use std::collections::HashSet;
-
 use crate::error::Result;
 use crate::model::{Definition, Example, Expression, Meaning};
+use crate::util::strings;
+use deunicode::deunicode;
 use mysql::prelude::*;
 use mysql::*;
 use regex::Regex;
+use std::collections::HashSet;
 
 #[derive(Debug)]
 struct Record {
@@ -46,7 +46,7 @@ impl Database {
     }
 
     pub fn query(&mut self, definition_id: u32, word: String) -> Result<Definition> {
-        println!("definition_id: {definition_id}, word: {word}");
+        //println!("definition_id: {definition_id}, word: {word}");
 
         let definition_query = format!(
             "SELECT m.id AS id,m.parentId AS parent_id,m.internalRep AS text,m.type AS kind FROM entry e \
@@ -106,12 +106,7 @@ impl Database {
                     let Some(synonymous) = self.synonymous(item.id) else {
                         continue;
                     };
-                    let definition = if let Some(first_char) = synonymous.chars().next() {
-                        let rest = &synonymous[first_char.len_utf8()..];
-                        format!("{}{}.", first_char.to_uppercase(), rest)
-                    } else {
-                        String::new()
-                    };
+                    let definition = format!("{}.", strings::to_titlecase(&synonymous));
                     DefType::Meaning(Meaning::new(&definition))
                 }
 
@@ -119,12 +114,8 @@ impl Database {
                     let Some(synonymous) = self.synonymous(item.id) else {
                         continue;
                     };
-                    let definition = if let Some(first_char) = synonymous.chars().next() {
-                        let rest = &synonymous[first_char.len_utf8()..];
-                        format!("{} {}{}.", &self.str(s), first_char.to_uppercase(), rest)
-                    } else {
-                        String::new()
-                    };
+                    let definition =
+                        format!("{} {}.", &self.str(s), strings::to_titlecase(&synonymous));
                     DefType::Meaning(Meaning::new(&definition))
                 }
 
@@ -132,15 +123,10 @@ impl Database {
                     let Some(synonymous) = self.synonymous(item.id) else {
                         continue;
                     };
-                    let definition = if let Some(first_char) = synonymous.chars().next() {
-                        let rest = &synonymous[first_char.len_utf8()..];
-                        if s.ends_with(":") {
-                            format!("{} {}{}.", &self.str(s), first_char, rest)
-                        } else {
-                            format!("{} {}{}.", &self.str(s), first_char.to_uppercase(), rest)
-                        }
+                    let definition = if s.ends_with(":") {
+                        format!("{} {}.", &self.str(s), synonymous)
                     } else {
-                        String::new()
+                        format!("{} {}.", &self.str(s), strings::to_titlecase(&synonymous))
                     };
                     DefType::Meaning(Meaning::new(&definition))
                 }
@@ -219,7 +205,8 @@ impl Database {
     }
 
     fn parse_example(&self, example: &str) -> Option<Example> {
-        let r = Regex::new(r"^([$\[\(].+\$(?: [\[\(].+[\]\)])?\.?)\s?(\(?[\w\-.,]{2,}\)?.*)?$").ok()?;
+        let r =
+            Regex::new(r"^([$\[\(].+\$(?: [\[\(].+[\]\)])?\.?)\s?(\(?[\w\-.,]{2,}\)?.*)?$").ok()?;
         if let Some(captures) = r.captures(example) {
             let text = captures.get(1).map(|m| m.as_str())?;
             let mut example = Example::new(&self.str(text));
@@ -237,12 +224,7 @@ impl Database {
             "SELECT t.description FROM relation r JOIN tree t ON r.treeId=t.id WHERE r.meaningId={meaning_id}"
         );
         let synonymous: Vec<String> = self.connection.query(query).ok()?;
-
-        let filtered: Vec<&str> = synonymous
-            .iter()
-            .map(|s| s.split(',').next().unwrap_or(s).trim())
-            .collect();
-
+        let filtered: Vec<&str> = synonymous.iter().map(|s| strings::first_word(s)).collect();
         if filtered.is_empty() {
             None
         } else {
