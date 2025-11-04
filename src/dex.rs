@@ -175,7 +175,9 @@ impl Database {
     }
 
     fn parse_expression(&mut self, record_id: u32, expression: &str) -> Option<(String, String)> {
-        let r = Regex::new(r"^\$([^=]+) =\$?(?: (.+?)\.?)?$").ok()?;
+        let expression = expression.strip_suffix('.').unwrap_or(expression);
+
+        let r = Regex::new(r"^\$([^=]+) =\$?(?: (.+))?$").ok()?;
         if let Some(captures) = r.captures(expression) {
             let phrase = captures.get(1).map(|m| m.as_str().to_string())?;
             let definition = match captures.get(2) {
@@ -185,7 +187,7 @@ impl Database {
             return Some((phrase, definition));
         }
 
-        let r = Regex::new(r"^\$(.+)\$ (se spune.+?)\.?$").ok()?;
+        let r = Regex::new(r"^\$(.+)\$ (.+)$").ok()?;
         if let Some(captures) = r.captures(expression) {
             let phrase = captures.get(1).map(|m| m.as_str().to_string())?;
             let definition = captures.get(2).map(|m| m.as_str().to_string())?;
@@ -202,9 +204,11 @@ impl Database {
                 format!("SELECT internalRep FROM meaning WHERE id={definition_id}");
             let definition: Option<String> = self.connection.query_first(definition_query).ok()?;
             if let Some(mut definition) = definition {
-                let r_definition = Regex::new(r"^\$[^=]+ =(?: (.+?)\.?)?$").ok()?;
+                let r_definition = Regex::new(r"^[\$\(][^=]+ =(?: (.+?)\.?)?$").ok()?;
                 if let Some(captures) = r_definition.captures(&definition) {
                     definition = captures.get(1).map(|m| m.as_str())?.to_string();
+                    return Some((expression.to_string(), definition));
+                } else {
                     return Some((expression.to_string(), definition));
                 }
             };
@@ -215,7 +219,7 @@ impl Database {
     }
 
     fn parse_example(&self, example: &str) -> Option<Example> {
-        let r = Regex::new(r"^([$\[\(].+\$(?: \[.+\])?\.?)\s?(\(?[\w\-.,]{2,}\)?.*)?$").ok()?;
+        let r = Regex::new(r"^([$\[\(].+\$(?: [\[\(].+[\]\)])?\.?)\s?(\(?[\w\-.,]{2,}\)?.*)?$").ok()?;
         if let Some(captures) = r.captures(example) {
             let text = captures.get(1).map(|m| m.as_str())?;
             let mut example = Example::new(&self.str(text));
