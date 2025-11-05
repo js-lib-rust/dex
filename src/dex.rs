@@ -2,6 +2,7 @@ use crate::error::Result;
 use crate::model::{Definition, Example, Expression, Meaning};
 use crate::util::strings;
 use deunicode::deunicode;
+use log::{debug, trace, warn};
 use mysql::prelude::*;
 use mysql::*;
 use regex::Regex;
@@ -21,6 +22,7 @@ pub struct Database {
 
 impl Database {
     pub fn try_new(url: &str) -> Result<Self> {
+        trace!("dex::Database::try_new(url: &str) -> Result<Self>");
         let pool = Pool::new(url)?;
         let connection = pool.get_conn()?;
 
@@ -28,6 +30,8 @@ impl Database {
     }
 
     pub fn next_word(&mut self, base_id: u32) -> Option<(u32, String)> {
+        trace!("dex::Database::next_word(&mut self, base_id: u32) -> Option<(u32, String)>");
+
         let query = format!(
             "SELECT e.id,e.description AS word FROM entry e \
         JOIN treeentry te ON e.id=te.entryId \
@@ -46,7 +50,10 @@ impl Database {
     }
 
     pub fn query(&mut self, definition_id: u32, word: String) -> Result<Definition> {
-        //println!("definition_id: {definition_id}, word: {word}");
+        trace!(
+            "dex::Database::query(&mut self, definition_id: u32, word: String) -> Result<Definition>"
+        );
+        debug!("definition_id: {definition_id}, word: {word}");
 
         let definition_query = format!(
             "SELECT m.id AS id,m.parentId AS parent_id,m.internalRep AS text,m.type AS kind FROM entry e \
@@ -86,6 +93,10 @@ impl Database {
         inflections: Vec<String>,
         records: Vec<Record>,
     ) -> Result<Definition> {
+        trace!(
+            "dex::Database::records_to_definition(&mut self, word: String, inflections: Vec<String>, records: Vec<Record>,) -> Result<Definition>"
+        );
+
         let mut keys = HashSet::new();
         for inflection in inflections {
             let key = inflection.to_lowercase();
@@ -161,6 +172,10 @@ impl Database {
     }
 
     fn parse_expression(&mut self, record_id: u32, expression: &str) -> Option<(String, String)> {
+        trace!(
+            "dex::Database::parse_expression(&mut self, record_id: u32, expression: &str) -> Option<(String, String)>"
+        );
+
         let expression = expression.strip_suffix('.').unwrap_or(expression);
 
         let r = Regex::new(r"^\$([^=]+) =\$?(?: (.+))?$").ok()?;
@@ -214,11 +229,13 @@ impl Database {
             }
         }
 
-        println!("--- rejected expression: record_id: {record_id}, expression: {expression}");
+        warn!("rejected expression: record_id: {record_id}, expression: {expression}");
         None
     }
 
     fn parse_example(&self, example: &str) -> Option<Example> {
+        trace!("dex::Database::parse_example(&self, example: &str) -> Option<Example>");
+
         let r =
             Regex::new(r"^([$\[\(].+\$(?: [\[\(].+[\]\)])?\.?)\s?(\(?[\w\-.,]{2,}\)?.*)?$").ok()?;
         if let Some(captures) = r.captures(example) {
@@ -229,11 +246,13 @@ impl Database {
             }
             return Some(example);
         }
-        println!("--- rejected example: {example}");
+        warn!("rejected example: {example}");
         None
     }
 
     fn synonymous(&mut self, meaning_id: u32) -> Option<String> {
+        trace!("dex::Database::synonymous(&mut self, meaning_id: u32) -> Option<String>");
+
         let query = format!(
             "SELECT t.description FROM relation r JOIN tree t ON r.treeId=t.id WHERE r.meaningId={meaning_id}"
         );
