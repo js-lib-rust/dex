@@ -9,10 +9,13 @@ pub struct Database {
 }
 
 impl Database {
+    const DATABASE: &'static str = "kb";
+    const COLLECTION: &'static str = "data";
+
     pub async fn try_new(url: &str) -> Result<Self> {
         let client = Client::with_uri_str(url).await?;
-        let database = client.database("kb");
-        let collection = database.collection::<Document>("data");
+        let database = client.database(Database::DATABASE);
+        let collection = database.collection::<Document>(Database::COLLECTION);
 
         Ok(Self { collection })
     }
