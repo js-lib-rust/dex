@@ -2,7 +2,7 @@ use crate::error::Result;
 use crate::model::{Definition, Example, Expression, Meaning};
 use crate::util::strings;
 use deunicode::deunicode;
-use log::{debug, trace, warn};
+use log::{debug, info, trace, warn};
 use mysql::prelude::*;
 use mysql::*;
 use regex::Regex;
@@ -226,6 +226,8 @@ impl Database {
             let definition: Option<String> = self.connection.query_first(query).ok()?;
             if let Some(definition) = definition {
                 return Some((phrase, self.str(&definition)));
+            } else {
+                info!("missing definition for related meaning for expression wiht id {record_id}");
             }
         }
 
@@ -245,6 +247,11 @@ impl Database {
                 example.set_source(source);
             }
             return Some(example);
+        }
+
+        let r = Regex::new(r"^\$([^=]+) =\$?(?: (.+))?$").ok()?;
+        if r.is_match(example)  {
+            warn!("expression used as example: {example}");
         }
         warn!("rejected example: {example}");
         None
