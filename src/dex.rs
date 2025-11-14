@@ -261,7 +261,7 @@ impl Database {
         trace!("dex::Database::synonymous(&mut self, meaning_id: u32) -> Option<String>");
 
         let query = format!(
-            "SELECT t.description FROM relation r JOIN tree t ON r.treeId=t.id WHERE r.meaningId={meaning_id}"
+            "SELECT t.description FROM relation r JOIN tree t ON r.treeId=t.id WHERE r.type=1 AND r.meaningId={meaning_id}"
         );
         let synonymous: Vec<String> = self.connection.query(query).ok()?;
         let filtered: Vec<&str> = synonymous.iter().map(|s| strings::first_word(s)).collect();
