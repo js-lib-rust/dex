@@ -273,7 +273,7 @@ impl Database {
     }
 
     fn str(&self, text: &str) -> String {
-        let r = Regex::new(r"\[(\d+)\]").unwrap();
+        let r = Regex::new(r"\[(\d+).*?\]").unwrap();
         let text = r.replace_all(text, "").to_string();
 
         let r = Regex::new(r"\u{0022}(.*?)\u{0022}").unwrap();
