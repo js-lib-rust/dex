@@ -71,6 +71,13 @@ impl Database {
         WHERE e.id={definition_id} and e.structuristId<>0"
         );
 
+        let part_of_speech_query = format!(
+            "SELECT i.description FROM entrylexeme el 
+        JOIN inflectedform _if ON el.lexemeId=_if.lexemeId \
+        JOIN inflection i ON _if.inflectionId=i.id \
+        WHERE el.entryId={definition_id} AND el.main=1"
+        );
+
         let records: Vec<Record> =
             self.connection
                 .query_map(definition_query, |(id, parent_id, text, kind)| Record {
@@ -84,12 +91,15 @@ impl Database {
             .connection
             .query_map(inflections_query, |inflection| inflection)?;
 
-        self.records_to_definition(word, inflections, records)
+        let part_of_speech: Option<String> = self.connection.query_first(part_of_speech_query)?;
+
+        self.records_to_definition(word, part_of_speech, inflections, records)
     }
 
     fn records_to_definition(
         &mut self,
         word: String,
+        part_of_speech: Option<String>,
         inflections: Vec<String>,
         records: Vec<Record>,
     ) -> Result<Definition> {
@@ -108,6 +118,10 @@ impl Database {
         for key in keys {
             definition_builder = definition_builder.key(&key);
         }
+        if let Some(part_of_speech) = part_of_speech {
+            definition_builder =
+                definition_builder.part_of_speech(&self.parse_part_of_speech(&part_of_speech));
+        }
 
         let r_missing_definition = Regex::new(r"^(\(.+\)|.+:)$")?;
         let r_incomplete_meaning = Regex::new(r"^\$\((.+)\)\$\s*$")?;
@@ -117,7 +131,7 @@ impl Database {
                     let Some(synonymous) = self.synonymous(item.id) else {
                         continue;
                     };
-                    let definition = format!("{}.", strings::to_titlecase(&synonymous));
+                    let definition = format!("{}.", strings::uppercase_first_char(&synonymous));
                     DefType::Meaning(Meaning::new(&definition))
                 }
 
@@ -125,8 +139,11 @@ impl Database {
                     let Some(synonymous) = self.synonymous(item.id) else {
                         continue;
                     };
-                    let definition =
-                        format!("{} {}.", &self.str(s), strings::to_titlecase(&synonymous));
+                    let definition = format!(
+                        "{} {}.",
+                        &self.normalize_text(s),
+                        strings::uppercase_first_char(&synonymous)
+                    );
                     DefType::Meaning(Meaning::new(&definition))
                 }
 
@@ -135,9 +152,13 @@ impl Database {
                         continue;
                     };
                     let definition = if s.ends_with(":") {
-                        format!("{} {}.", &self.str(s), synonymous)
+                        format!("{} {}.", &self.normalize_text(s), synonymous)
                     } else {
-                        format!("{} {}.", &self.str(s), strings::to_titlecase(&synonymous))
+                        format!(
+                            "{} {}.",
+                            &self.normalize_text(s),
+                            strings::uppercase_first_char(&synonymous)
+                        )
                     };
                     DefType::Meaning(Meaning::new(&definition))
                 }
@@ -146,10 +167,13 @@ impl Database {
                     let Some((phrase, definition)) = self.parse_expression(item.id, s) else {
                         continue;
                     };
-                    DefType::Expression(Expression::new(&self.str(&phrase), &self.str(&definition)))
+                    DefType::Expression(Expression::new(
+                        &self.normalize_text(&phrase),
+                        &self.normalize_text(&definition),
+                    ))
                 }
 
-                _ => DefType::Meaning(Meaning::new(&self.str(&item.definition))),
+                _ => DefType::Meaning(Meaning::new(&self.normalize_text(&item.definition))),
             };
 
             for example in item.examples {
@@ -169,6 +193,21 @@ impl Database {
         }
 
         definition_builder.build()
+    }
+
+    fn parse_part_of_speech(&self, part_of_speech: &str) -> String {
+        match part_of_speech {
+            s if s.starts_with("Adjectiv, masculin") => "Adjectiv masculin",
+            s if s.starts_with("Adjectiv, feminin") => "Adjectiv feminin",
+            s if s.starts_with("Pronume, masculin") => "Pronume masculin",
+            s if s.starts_with("Pronume, feminin") => "Pronume feminin",
+            "Invariabil" | "Formă unică" => part_of_speech,
+            _ => match part_of_speech.split(",").into_iter().next() {
+                Some(s) => s,
+                None => "", // just to make compiler happy
+            },
+        }
+        .to_string()
     }
 
     fn parse_expression(&mut self, record_id: u32, expression: &str) -> Option<(String, String)> {
@@ -225,7 +264,7 @@ impl Database {
             );
             let definition: Option<String> = self.connection.query_first(query).ok()?;
             if let Some(definition) = definition {
-                return Some((phrase, self.str(&definition)));
+                return Some((phrase, self.normalize_text(&definition)));
             } else {
                 info!("missing definition for related meaning for expression wiht id {record_id}");
             }
@@ -238,11 +277,10 @@ impl Database {
     fn parse_example(&self, example: &str) -> Option<Example> {
         trace!("dex::Database::parse_example(&self, example: &str) -> Option<Example>");
 
-        let r =
-            Regex::new(r"^([$\[\(].+\$(?: [\[\(].+[\]\)])?\.?)\s?(\(?[\w\-.,]{2,}\)?.*)?$").ok()?;
+        let r = Regex::new(r"^(.+)\$\.?(?:\s\(?(.+?)\)?)?\.?$").ok()?;
         if let Some(captures) = r.captures(example) {
             let text = captures.get(1).map(|m| m.as_str())?;
-            let mut example = Example::new(&self.str(text));
+            let mut example = Example::new(&self.normalize_text(text));
             if let Some(source) = captures.get(2).map(|m| m.as_str()) {
                 example.set_source(source);
             }
@@ -250,7 +288,7 @@ impl Database {
         }
 
         let r = Regex::new(r"^\$([^=]+) =\$?(?: (.+))?$").ok()?;
-        if r.is_match(example)  {
+        if r.is_match(example) {
             warn!("expression used as example: {example}");
         }
         warn!("rejected example: {example}");
@@ -272,7 +310,7 @@ impl Database {
         }
     }
 
-    fn str(&self, text: &str) -> String {
+    fn normalize_text(&self, text: &str) -> String {
         let r = Regex::new(r"\[(\d+).*?\]").unwrap();
         let text = r.replace_all(text, "").to_string();
 

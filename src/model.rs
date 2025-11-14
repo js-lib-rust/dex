@@ -1,4 +1,7 @@
-use crate::error::{AppError, Result};
+use crate::{
+    error::{AppError, Result},
+    util::strings,
+};
 use serde::Serialize;
 use std::collections::HashSet;
 
@@ -7,6 +10,7 @@ pub struct Definition {
     word: String,
     // key is a space separated string of all word's flexions, in both UTF-8 and ASCII formats
     key: String,
+    part_of_speech: Option<String>,
     meanings: Vec<Meaning>,
     expressions: Vec<Expression>,
 }
@@ -19,6 +23,7 @@ impl Definition {
 pub struct DefinitionBuilder {
     word: Option<String>,
     keys: HashSet<String>,
+    part_of_speech: Option<String>,
     meanings: Vec<Meaning>,
     expressions: Vec<Expression>,
 }
@@ -28,6 +33,7 @@ impl DefinitionBuilder {
         DefinitionBuilder {
             word: None,
             keys: HashSet::new(),
+            part_of_speech: None,
             meanings: Vec::new(),
             expressions: Vec::new(),
         }
@@ -40,6 +46,11 @@ impl DefinitionBuilder {
 
     pub fn key(mut self, key: &str) -> Self {
         self.keys.insert(key.to_string());
+        self
+    }
+
+    pub fn part_of_speech(mut self, part_of_speech: &str) -> Self {
+        self.part_of_speech = Some(part_of_speech.to_string());
         self
     }
 
@@ -60,6 +71,7 @@ impl DefinitionBuilder {
         Ok(Definition {
             word,
             key: self.keys.into_iter().collect::<Vec<String>>().join(" "),
+            part_of_speech: self.part_of_speech,
             meanings: self.meanings,
             expressions: self.expressions,
         })
@@ -75,8 +87,17 @@ pub struct Expression {
 
 impl Expression {
     pub fn new(phrase: &str, definition: &str) -> Self {
+        let mut phrase = if strings::ends_with_punctuation(phrase) {
+            strings::trim_end_punctuation(phrase)
+        }
+        else {
+            phrase.to_string()
+        };
+        if strings::starts_with_uppercase(&phrase) {
+            phrase = strings::lowercase_first_char(&phrase);
+        }
         Self {
-            phrase: phrase.to_string(),
+            phrase,
             definition: definition.to_string(),
             examples: Vec::new(),
         }
@@ -114,8 +135,17 @@ pub struct Meaning {
 
 impl Meaning {
     pub fn new(definition: &str) -> Self {
+        let mut definition = if !strings::starts_with_uppercase(definition) {
+            strings::uppercase_first_char(definition)
+        }
+        else {
+            definition.to_string()
+        };
+        if !strings::ends_with_punctuation(&definition) {
+            definition = format!("{definition}.");
+        }
         Self {
-            definition: definition.to_string(),
+            definition,
             examples: Vec::new(),
         }
     }
